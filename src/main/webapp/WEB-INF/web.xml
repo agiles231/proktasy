@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<web-app xmlns="http://java.sun.com/xml/ns/j2ee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd"
+	version="2.4">
+
+
+	<!-- General description of your web application -->
+
+	<display-name>Proktasy - Okta Proxy with Ectasy</display-name>
+	<description>
+    	This application is a proxy between clients and Okta's rest api.
+    	This proxy takes care of rate limiting. You might say, well with
+    	the way that Okta provides headers, rate limiting is easy to avoid.
+    	WRONG! If you have multiple applications accessing their rest api,
+    	it is quite possible that one won't have the necessary information
+    	before making a request and will trigger a rate limit cool-down.
+    	Using this proxy, this problem is taken care of in such a way that
+    	the client need only change their base URL.
+    </description>
+
+	<servlet>
+		<servlet-name>Proktasy</servlet-name>
+		<servlet-class>com.agiles231.proktasy.proxy.OktaApiProxy</servlet-class>
+		<init-param>
+			<param-name>log</param-name>
+			<param-value>true</param-value>
+		</init-param>
+<!-- 		<init-param> -->
+<!-- 			<param-name>forwardip</param-name> -->
+<!-- 			<param-value>true</param-value> -->
+<!-- 		</init-param> -->
+		<init-param>
+			<param-name>targetUri</param-name>
+			<param-value>https://domain.okta.com</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.maxConcurrentRequests</param-name>
+			<param-value>75</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.rateLimitRegexes</param-name>
+			<param-value>/api/v1/authn,/api/v1authn/factors/.+/verify,/api/v1/apps,/api/v1/apps/.+,/api/v1/groups,/api/v1/groups/.+,/api/v1/users,/api/v1/users/.+,/api/v1/users/.+,/api/v1/logs,/api/v1/events,/api/v1/sessions,/api/v1/orgs,/oauth2/.+/v1,/oauth2/v1,/oauth2/v1/clients,/oauth2,/api/v1</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.proxyHost</param-name>
+			<param-value>domain.proxy.com</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.proxyPort</param-name>
+			<param-value>8080</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.bufferRequests</param-name>
+			<param-value>5</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.bufferConcurrency</param-name>
+			<param-value>5</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.targetHost</param-name>
+			<param-value>https://domain.okta.com</param-value>
+		</init-param>
+		<init-param>
+			<param-name>proktasy.proktasyHost</param-name>
+			<param-value>thismachine.domain.com:8080/proktasy</param-value>
+		</init-param>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>Proktasy</servlet-name>
+		<url-pattern>/*</url-pattern>
+	</servlet-mapping>
+
+</web-app>
