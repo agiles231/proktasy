@@ -27,7 +27,7 @@ import org.mitre.dsmiley.httpproxy.ProxyServlet;
 
 public class OktaApiProxy extends ProxyServlet {
 	
-	private static Long TIME_EPSILON_MILLIS = 5000l; // one sec, used for time disrepancy between local server and okta
+	private static Long TIME_EPSILON_MILLIS = 5000l; // five seconds, used for time disrepancy between local server and okta
 	private static Integer BUFFER_REMAINING = 5;
 	private static Integer BUFFER_CONCURRENCY = 5;
 	private static Integer MAX_CONCURRENT_REQUESTS;
@@ -41,7 +41,7 @@ public class OktaApiProxy extends ProxyServlet {
 	private static Map<String, Integer> rateLimitRemainings;
 	private static Map<String, Instant> rateLimitResets;
 	private static Map<String, Thread> rateLimitFetchThread;
-	private static Map<String, List<Thread>> waitingThreads; // threads waiting on more info, or waiting on reset
+	private static Map<String, Queue<Thread>> waitingThreads; // threads waiting on more info, or waiting on reset
 	private static Queue<Thread> concurrentWaitingThreads; // threads waiting due to concucrrency
 	
 	private static Object lock;
@@ -93,8 +93,7 @@ public class OktaApiProxy extends ProxyServlet {
 		try {
 			targetUriObj = new URI(targetUri);
 		} catch (URISyntaxException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new ServletException(e);
 		}
 		this.targetHost = URIUtils.extractHost(targetUriObj);
 	}
@@ -120,7 +119,7 @@ public class OktaApiProxy extends ProxyServlet {
 				synchronized(lock) { // lock for entire period before request when figuring out what state is
 					if (!isFetchThread && fetchNeeded) { // because of init state, we know these were set from previous iteration and that we mustve slept/waited
 						fetchNeeded = false; // assume false now; if true, we will figure out later
-						List<Thread> threads = waitingThreads.get(rateLimitRegex); // remove from waiting threads
+						Queue<Thread> threads = waitingThreads.get(rateLimitRegex); // remove from waiting threads
 						threads.remove(thisThread);
 					}
 					if (tooManyConcurrentRequests) { // because of init state, we know these were set from previous iteration and that we mustve slept/waited
@@ -132,7 +131,10 @@ public class OktaApiProxy extends ProxyServlet {
 					existingRemaining = rateLimitRemainings.get(rateLimitRegex); // last known "remaining" for rate limit bucket
 					currentReqs = currentRequests.get(rateLimitRegex); // all currently executing requests
 					totalConcurrentRequests = currentRequests.values().stream().mapToInt(v -> v).sum();
-					if (existingReset.isBefore(now)){ // last known rest is in the past, so determine new reset
+					if (totalConcurrentRequests >= MAX_CONCURRENT_REQUESTS - BUFFER_CONCURRENCY) {
+						concurrentWaitingThreads.add(thisThread);
+						tooManyConcurrentRequests = true;
+					} else if (existingReset.isBefore(now)){ // last known rest is in the past, so determine new reset
 						fetchNeeded = true;
 						Thread fetchThread = null;
 						fetchThread = rateLimitFetchThread.get(rateLimitRegex);
@@ -144,12 +146,9 @@ public class OktaApiProxy extends ProxyServlet {
 							rateLimitFetchThread.put(rateLimitRegex, Thread.currentThread()); // set fetching thread to this
 						}
 						if (!isFetchThread) { // another thread is determining new reset, so wait until figured out
-							List<Thread> threads = waitingThreads.get(rateLimitRegex);
+							Queue<Thread> threads = waitingThreads.get(rateLimitRegex);
 							threads.add(thisThread);
 						}
-					} else if (totalConcurrentRequests >= MAX_CONCURRENT_REQUESTS - BUFFER_CONCURRENCY) {
-						concurrentWaitingThreads.add(thisThread);
-						tooManyConcurrentRequests = true;
 					} else if (existingRemaining - currentReqs > BUFFER_REMAINING) { // reset in future, remaining left so go for it
 						execute = true;
 						currentRequests.compute(rateLimitRegex, (key, value) -> value + 1);
@@ -162,7 +161,7 @@ public class OktaApiProxy extends ProxyServlet {
 					try {
 						long timeToSleep = Duration.between(Instant.now(), existingReset).toMillis() + TIME_EPSILON_MILLIS;
 						System.out.println("Sleeping for " + timeToSleep + " for rate limiting...");
-						Thread.sleep(timeToSleep);
+						thisThread.wait(timeToSleep);
 					} catch (InterruptedException e) {
 						throw new ServletException(e);
 					}
@@ -190,8 +189,10 @@ public class OktaApiProxy extends ProxyServlet {
 						existingReset = rateLimitResets.get(rateLimitRegex); // fetch fresh
 						existingRemaining = rateLimitRemainings.get(rateLimitRegex);
 						totalConcurrentRequests = currentRequests.values().stream().mapToInt(v -> v).sum();
-						currentRequests.compute(rateLimitRegex, (key, value) -> value - 1);
-						requestAdded = false;
+						if (requestAdded) {
+							currentRequests.compute(rateLimitRegex, (key, value) -> value - 1);
+							requestAdded = false;
+						}
 						if (concurrentWaitingThreads.size() > 0) { // if a thread is waiting due to concurrency, then we will wake it since this just completed
 							Thread waitingThread = concurrentWaitingThreads.poll();
 							if (waitingThread != null) {
@@ -214,13 +215,13 @@ public class OktaApiProxy extends ProxyServlet {
 							rateLimitFetchThread.remove(rateLimitRegex); // remove this as fetching thread
 							isFetchThread = false;
 							// notify waiting threads
-							List<Thread> threads = waitingThreads.get(rateLimitRegex);
-							waitingThreads.put(rateLimitRegex, new LinkedList<>());
+							Queue<Thread> threads = waitingThreads.get(rateLimitRegex);
 							for (Thread thread : threads) {
 								synchronized(thread) {
 									thread.notify();
 								}
 							}
+							threads.clear(); // remove them all since they are not waiting anymore
 						}
 					}
 				}
@@ -228,25 +229,25 @@ public class OktaApiProxy extends ProxyServlet {
 		} catch (Exception e) {
 			// neutralize effects from this thread on shared state
 			synchronized(lock) {
+				Queue<Thread> threads = waitingThreads.get(rateLimitRegex);
 				if (isFetchThread) {
 					isFetchThread = false;
 					rateLimitFetchThread.remove(rateLimitRegex);
 					// notify a single waiting thread so it can become the fetch thread
-					List<Thread> threads = waitingThreads.get(rateLimitRegex);
-					Thread thread = threads.size() > 0 ? threads.get(0) : null;
+					Thread thread = !threads.isEmpty() ? threads.poll() : null;
 					if(thread != null) {
 						synchronized(thread) {
 							thread.notify();
 						}
 					}
+				} else if (threads != null && threads.contains(thisThread)) {
+					waitingThreads.get(rateLimitRegex).remove(thisThread);
 				}
+
 				if (concurrentWaitingThreads.contains(thisThread)) {
 					concurrentWaitingThreads.remove(thisThread);
 				}
-				List<Thread> threads = waitingThreads.get(rateLimitRegex);
-				if (threads != null && threads.contains(thisThread)) {
-					waitingThreads.get(rateLimitRegex).remove(thisThread);
-				}
+				
 				if (requestAdded) {
 					currentRequests.compute(rateLimitRegex, (key, value) -> value - 1);
 				}
