@@ -22,7 +22,7 @@ a new rate limiting period begins.
 ## Configuration
 All configuration is done through web.xml.
 
-`targetUri` : where proktasy is proxying to. i.e. `https://domain.cypress.com`
+`targetUri` : where proktasy is proxying to. i.e. `https://domain.okta.com`
 
 `proktasy.maxConcurrentRequests` : How many requests can be executed at the same time. For legacy, this is 75
 
