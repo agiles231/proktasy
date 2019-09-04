@@ -3,17 +3,24 @@ An Okta REST API proxy that solves rate limiting woes.
 
 ## Rate limiting
 Okta implements rate limiting for different endpoints. Okta makes it pretty easy for a single
-application to avoid rate limiting cooldowns through the use of Http headers. The headers
+application to avoid reducing "remaining" request to 0 through the use of Http headers. The headers
 provide the state of rate limiting for the endpoint that was just hit.
 
 ## The problem
 As mentioned, for a single application, dealing with rate limiting is easy. For multiple
 applications, not so much. When one application changes the state of the rate limiting
 for an endpoint, another application will not know the change that has occurred. For
-example, suppose an application a1 is about to hit the endpoint "api/v1/users" (referred to
-as e1 throughout this example). If the rate limit r = 600/minute and another application a2
-has hit e1 600 times this minute, a1 has no way of knowing this and will inadvertently
-trigger a cooldown.
+example, suppose there are 10 applications, a0, a1, ..., a9, that are all hitting the same
+endpoint (or at least same as far as Okta is concerned with rate limiting). Also, for
+simplicity, assume they hit the endpoint sequentially. So according to the headers received
+by each app from its last request, they each have a remaining amount r0, r1, ..., r9.
+Suppose r0 = 12, r1 = 11, ..., r9 = 3. Now, if each app is coded in such a way that they
+attempt to make sure that at least 5 are remaining (so that Okta's own calls to the API
+from the frontend succeed), then apps r7, r8, and r9 will not attempt their next call
+until the reset time that they were given in Okta's reponse headers. However, apps a0,
+a1, ..., a6 will all attempt their next call and apps a4, a5, a6 will all be returned
+an http 429. This is sub-optimal because now some frontend administrators may have to
+wait to complete tasks they wish to complete.
 
 ## The Solution
 With proktasy, a1 would go through proktasy and proktasy would not make the request until
