@@ -21,17 +21,29 @@ a new rate limiting period begins.
 
 ## Configuration
 All configuration is done through web.xml.
+
 `targetUri` : where proktasy is proxying to. i.e. `https://domain.cypress.com`
+
 `proktasy.maxConcurrentRequests` : How many requests can be executed at the same time. For legacy, this is 75
+
 `proktasy.rateLimitRegexes` : These define which rate limit will be applied to a given request
+
 `proktasy.proxyHost` : Your company's proxy, if needed
+
 `proktasy.proxyPort` : Your company's proxy port, if needed
+
 `proktasy.bufferRequests` : For each rate limit bucket, this many will be subtracted to allow leniency (in case someone else is using same endpoint). Must be greater than or equal to 0.
+
 `proktasy.bufferConcurrency` : `proktasy.maxConcurrentRequests` - `proktasy.bufferConcurrency` will determine maximum concurrent requests allowed by proktasy.
+
 `proktasy.targetHost` : Okta host. Used for substituting headers in responses for Okta.
+
 `proktasy.proktasyHost` : Where this application is hosted. Used for substituting headers in responses for Okta.
 
+
+
 Additional configuration is required for dependencies.
+
 See https://github.com/mitre/HTTP-Proxy-Servlet for additional details
 
 ## Solution short-comings
