@@ -23,8 +23,8 @@ an http 429. This is sub-optimal because now some frontend administrators may ha
 wait to complete tasks they wish to complete.
 
 ## The Solution
-With proktasy, a1 would go through proktasy and proktasy would not make the request until
-a new rate limiting period begins.
+With proktasy, a0, ..., a9 would go through proktasy and proktasy would not reduce the
+"remainings" below a threshold (determined by configuration).
 
 ## Configuration
 All configuration is done through web.xml.
