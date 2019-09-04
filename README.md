@@ -16,7 +16,7 @@ simplicity, assume they hit the endpoint sequentially. So according to the heade
 by each app from its last request, they each have a remaining amount r0, r1, ..., r9.
 Suppose r0 = 12, r1 = 11, ..., r9 = 3. Now, if each app is coded in such a way that they
 attempt to make sure that at least 5 are remaining (so that Okta's own calls to the API
-from the frontend succeed), then apps r7, r8, and r9 will not attempt their next call
+from the frontend succeed), then apps a7, a8, and a9 will not attempt their next call
 until the reset time that they were given in Okta's reponse headers. However, apps a0,
 a1, ..., a6 will all attempt their next call and apps a4, a5, a6 will all be returned
 an http 429. This is sub-optimal because now some frontend administrators may have to
