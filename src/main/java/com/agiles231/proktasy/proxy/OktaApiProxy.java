@@ -155,13 +155,15 @@ public class OktaApiProxy extends ProxyServlet {
 						requestAdded = true;
 					} else if (existingRemaining - currentReqs <= BUFFER_REMAINING) { // no more remaining, so wait until reset then re-evaluate
 						noneRemaining = true;
+						
 					}
 				}
 				if (noneRemaining) {
 					try {
 						long timeToSleep = Duration.between(Instant.now(), existingReset).toMillis() + TIME_EPSILON_MILLIS;
 						System.out.println("Sleeping for " + timeToSleep + " for rate limiting...");
-						thisThread.wait(timeToSleep);
+						thisThread.sleep(timeToSleep);
+						
 					} catch (InterruptedException e) {
 						throw new ServletException(e);
 					}
